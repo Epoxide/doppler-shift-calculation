@@ -1,12 +1,8 @@
 clear all
 clc
-%%%%%%%%%%%%%%%%%%%%%
-addpath(genpath('./functions/dial'));
-addpath(genpath('./datasets'));
 addpath(genpath('./OrbitCode'));
 addpath(genpath('./GPS_CoordinateXforms'));
 addpath('./tle');
-%%%%%%%%%%%%%%%%%%%%
 filename = [cd '/tle/amateur.txt'];
 filename2 = [cd '/tle/cubesat.txt'];
 urlwrite('http://www.celestrak.com/NORAD/elements/amateur.txt',filename);
@@ -118,8 +114,8 @@ for i = 1:2
         Azf = Azf + 360;
     end
     sat_Alt = -Rl+sqrt(((Rl^2)+(Slrange^2)+(2*Slrange*Rl*sind(Elev)))); % Altitude over Earth [m]
-    R_sat   = sqrt(((Re^2*cosd(llh(1)))^2+(Rp^2*sind(llh(1)))^2)/((Re*cosd(llh(1)))^2+(Rp*sind(llh(1)))^2))*1e3;
-    sat_Vel = sqrt(3.987*1e14/(R_sat+sat_Alt));
+    R_sat   = sqrt(((Re^2*cosd(llh(1)))^2+(Rp^2*sind(llh(1)))^2)/((Re*cosd(llh(1)))^2+(Rp*sind(llh(1)))^2))*1e3; % Earth's radius under the satellite
+    sat_Vel = sqrt(3.987*1e14/(R_sat+sat_Alt)); % Satellite's linear velocity [m/s]
     Slrangetable(i) = Slrange;
     timestring = datestr(time);
     fprintf('\n')
