@@ -43,10 +43,26 @@ for i = 1:length(ia)
     tle2All{i,:} = c{ia(i)};
 end
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% TLE Information from Oscar 7
-
-tle1Data = tle1All{1};
-tle2Data = tle2All{1};
+% TLE Information for selected sat
+satselect = input('Satellite name: ', 's');
+satnum = strmatch(lower(satselect),lower(satNamesAll));
+while length(satnum) ~= 1
+    if length(satnum) > 1
+        fprintf('\n')
+        disp('Several satellites with that name.')
+        satselect = input('Satellite name: ', 's');
+        satnum = strmatch(lower(satselect),lower(satNamesAll));
+    end
+    if isempty(satnum)
+        fprintf('\n')
+        disp('No satellite with that name.')
+        satselect = input('Satellite name: ', 's');
+        satnum = strmatch(lower(satselect),lower(satNamesAll));
+    end
+end
+fprintf('\n')
+tle1Data = tle1All{satnum};
+tle2Data = tle2All{satnum};
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Constants
@@ -79,9 +95,11 @@ GE_TH 				= [-sind(mylst)          cosd(mylst)              0;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Azimuth and Elevation
 Slrangetable = zeros(1,2);
-satname = ['Satellite: ' amateur{1}];
+satfreq = 1e6*input('Downlink frequency [MHz]: '); % Satellite frequency [Hz]
+fprintf('\n')
+satname = ['Satellite: ' satNamesAll{satnum}];
 disp(satname)
-satfreq = 145.950*1e6; % Satellite frequency [Hz]
+
 for i = 1:2
     time = datetime('now','TimeZone','UTC');
     yr  = time.Year;
