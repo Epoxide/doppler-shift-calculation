@@ -117,7 +117,7 @@ for i = 1:2
     R_sat   = sqrt(((Re^2*cosd(llh(1)))^2+(Rp^2*sind(llh(1)))^2)/((Re*cosd(llh(1)))^2+(Rp*sind(llh(1)))^2))*1e3; % Earth's radius under the satellite
     sat_Vel = sqrt(3.987*1e14/(R_sat+sat_Alt)); % Satellite's linear velocity [m/s]
     Slrangetable(i) = Slrange;
-    timestring = datestr(time);
+    timestring = datestr(datetime('now','TimeZone','CET'));
     fprintf('\n')
     disp(['Time: ' timestring])
     disp(['Azimuth: ', num2str(Azf) char(176)])
