@@ -94,61 +94,88 @@ GE_TH 				= [-sind(mylst)          cosd(mylst)              0;
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Azimuth and Elevation
-Slrangetable = zeros(1,2);
 satfreq = 1e6*input('Downlink frequency [MHz]: '); % Satellite frequency [Hz]
 fprintf('\n')
+time = input('Time (YYYY-MM-DD HH:MM:SS in UTC): ','s');
+while length(time) ~= 19
+    disp('Wrong format')
+    time = input('Time (YYYY-MM-DD HH:MM:SS in UTC): ','s');
+end
+fprintf('\n')
+yr  = str2double(time(1:4));
+mon = str2double(time(6:7));
+day = str2double(time(9:10));
+hr  = str2double(time(12:13));
+min = str2double(time(15:16));
+sec = str2double(time(18:19));
+
+jd = 367.0 * yr  ...
+    - floor( (7 * (yr + floor( (mon + 9) / 12.0) ) ) * 0.25 )   ...
+    + floor( 275 * mon / 9.0 ) ...
+    + day + 1721013.5  ...
+    + ( (sec/60.0 + min ) / 60.0 + hr ) / 24.0;
+jdNow = jd;
+tsince = (jdNow-satrec.jdsatepoch)*24*60;
+[satrec, xsat_ecf, vsat_ecf, gst] = spg4_ecf(satrec,tsince);
+R_sc    = xsat_ecf';
+% Position vector of the spacecraft relative to the observer
+R_rel = R_sc - R_ob';
+llhh = ecf2llhT(R_sc'*1e3);
+llh(1) = radtodeg(llhh(1));
+llh(2) = radtodeg(llhh(2));
+R_rel_TH = GE_TH*R_rel;
+rv = R_rel_TH/norm(R_rel_TH);
+Elev = asin(rv(3))*180/pi;      % Elevation angle
+Azf  = atan2(rv(1),rv(2))*180/pi; % Azimuth angle
+Slrange = sqrt((R_rel_TH(1)^2+R_rel_TH(2)^2+R_rel_TH(3)^2))*1e3; % Slant range [m]
+if Azf < 0
+    Azf = Azf + 360;
+end
+sat_Alt = -Rl+sqrt(((Rl^2)+(Slrange^2)+(2*Slrange*Rl*sind(Elev)))); % Altitude over Earth [m]
+R_sat   = sqrt(((Re^2*cosd(llh(1)))^2+(Rp^2*sind(llh(1)))^2)/((Re*cosd(llh(1)))^2+(Rp*sind(llh(1)))^2))*1e3; % Earth's radius under the satellite
+sat_Vel = sqrt(3.987*1e14/(R_sat+sat_Alt)); % Satellite's linear velocity [m/s]
 satname = ['Satellite: ' satNamesAll{satnum}];
 disp(satname)
+fprintf('\n')
+disp(['Time: ' time(1:4) '-' time(6:7) '-' time(9:10) ' ' num2str(hr+1) ':' time(15:16) ':' time(18:19)])
+disp(['Azimuth: ', num2str(Azf) char(176)])
+disp(['Elevation: ', num2str(Elev) char(176)])
+disp(['Slant range: ', num2str(Slrange*1e-3), ' km'])
+disp(['Altitude: ', num2str(sat_Alt*1e-3), ' km'])
+disp(['Velocity: ', num2str(sat_Vel), ' m/s'])
 
-for i = 1:2
-    time = datetime('now','TimeZone','UTC');
-    yr  = time.Year;
-    mon = time.Month;
-    day = time.Day;
-    hr  = time.Hour;
-    min = time.Minute;
-    sec = time.Second;
-    
-    jd = 367.0 * yr  ...
-        - floor( (7 * (yr + floor( (mon + 9) / 12.0) ) ) * 0.25 )   ...
-        + floor( 275 * mon / 9.0 ) ...
-        + day + 1721013.5  ...
-        + ( (sec/60.0 + min ) / 60.0 + hr ) / 24.0;
-    jdNow = jd;
-    tsince = (jdNow-satrec.jdsatepoch)*24*60;
-    [satrec, xsat_ecf, vsat_ecf, gst] = spg4_ecf(satrec,tsince);
-    R_sc    = xsat_ecf';
-    % Position vector of the spacecraft relative to the observer
-    R_rel = R_sc - R_ob';
-    llhh = ecf2llhT(R_sc'*1e3);
-    llh(1) = radtodeg(llhh(1));
-    llh(2) = radtodeg(llhh(2));
-    R_rel_TH = GE_TH*R_rel;
-    rv = R_rel_TH/norm(R_rel_TH);
-    Elev = asin(rv(3))*180/pi;      % Elevation angle
-    Azf  = atan2(rv(1),rv(2))*180/pi; % Azimuth angle
-    Slrange = sqrt((R_rel_TH(1)^2+R_rel_TH(2)^2+R_rel_TH(3)^2))*1e3; % Slant range [m]
-    if Azf < 0
-        Azf = Azf + 360;
-    end
-    sat_Alt = -Rl+sqrt(((Rl^2)+(Slrange^2)+(2*Slrange*Rl*sind(Elev)))); % Altitude over Earth [m]
-    R_sat   = sqrt(((Re^2*cosd(llh(1)))^2+(Rp^2*sind(llh(1)))^2)/((Re*cosd(llh(1)))^2+(Rp*sind(llh(1)))^2))*1e3; % Earth's radius under the satellite
-    sat_Vel = sqrt(3.987*1e14/(R_sat+sat_Alt)); % Satellite's linear velocity [m/s]
-    Slrangetable(i) = Slrange;
-    timestring = datestr(datetime('now','TimeZone','CET'));
-    fprintf('\n')
-    disp(['Time: ' timestring])
-    disp(['Azimuth: ', num2str(Azf) char(176)])
-    disp(['Elevation: ', num2str(Elev) char(176)])
-    disp(['Slant range: ', num2str(Slrange*1e-3), ' km'])
-    disp(['Altitude: ', num2str(sat_Alt*1e-3), ' km'])
-    disp(['Velocity: ', num2str(sat_Vel), ' m/s'])
-    if i < 2
-        pause(10)
-    end
+%%%%%%%%%%%%%%%
+% 1 sec future
+[satrec, startmfe, stopmfe, deltamin] = twoline2rv(whichconst, tle1Data,tle2Data,typerun,typeinput);
+if sec == 59
+    futuresec = sec-1;
+else
+    futuresec = sec+1;
 end
-dSlrange = Slrangetable(1)-Slrangetable(2); % Delta slant range [m]
-V_rel = dSlrange/10; % Relative velocity between ground station and satellite [m/s]
+
+jdfuture = 367.0 * yr  ...
+    - floor( (7 * (yr + floor( (mon + 9) / 12.0) ) ) * 0.25 )   ...
+    + floor( 275 * mon / 9.0 ) ...
+    + day + 1721013.5  ...
+    + ( (futuresec/60.0 + min ) / 60.0 + hr ) / 24.0;
+jdFuture = jdfuture;
+tsinceFuture = (jdFuture-satrec.jdsatepoch)*24*60;
+[satrec, xsat_ecf, vsat_ecf, gst] = spg4_ecf(satrec,tsinceFuture);
+R_sc    = xsat_ecf';
+% Position vector of the spacecraft relative to the observer
+R_rel = R_sc - R_ob';
+llhh = ecf2llhT(R_sc'*1e3);
+llh(1) = radtodeg(llhh(1));
+llh(2) = radtodeg(llhh(2));
+R_rel_TH = GE_TH*R_rel;
+SlrangeFuture = sqrt((R_rel_TH(1)^2+R_rel_TH(2)^2+R_rel_TH(3)^2))*1e3; % Slant range [m]
+
+if sec == 59
+    dSlrange = Slrange - SlrangeFuture; % Delta slant range [m]
+else
+    dSlrange = SlrangeFuture - Slrange; % Delta slant range [m]
+end
+V_rel = dSlrange; % Relative velocity between ground station and satellite [m/s] (Delta t = 1)
 fprintf('\n')
 disp(['Relative velocity: ' num2str(V_rel), ' m/s']);
 Doppler_shift = V_rel*satfreq/clight; % Doppler shift [Hz]
