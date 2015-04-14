@@ -50,7 +50,11 @@ enableButtons % buttons are disabled until dials are created
             datatable1{1,4} = llh(2);
             set(table1, 'Data',datatable1,'RowName',Sat);
           end
-          
+          % To try and fix cables
+          if Az > 180
+              Az = Az - 180;
+              El = 180 - El;
+          end
           set(satName, 'String', Sat);
           sameAsLastSatellite = strcmp(Sat,lastSat);
           if sameAsLastSatellite || strcmp(lastSat, 'initial satellite')
@@ -746,8 +750,8 @@ enableButtons % buttons are disabled until dials are created
     typerun             = 'c';
     typeinput           = 'e';
     H                   = 0.500;
-    mylat               = 59.3326;
-    mylst               = 18.0649;
+    mylat               = 59.3496;
+    mylst               = 18.0724;
     Re                  = 6378.137;     % Equatorial Earh's radius [km]
     Rp                  = 6356.7523;    % Polar Earh's radius [km]
     f                   = (Re - Rp)/Re; % Oblateness or flattening
