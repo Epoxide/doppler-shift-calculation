@@ -13,7 +13,7 @@ starttimemes = datenum([str2num(date(1:4)), str2num(date(5:6)),...
 
 
 % Central Frequency
-F_central = FileCode{4}{1};
+F_central = str2num(FileCode{4}{1}(1:end-3))*1e3;
 
 
 % Get Data Info
@@ -46,11 +46,12 @@ for kLT = 1 : floor(FileInfo.TotalSamples/L)
     
     S = abs(real(fft(windowf.*signal,NFFT)/L));
     S = flipud([S(NFFT/2+2:end);S(1:NFFT/2+1)]);
-    f = FS/2*linspace(-1,1,NFFT);
+    f = FS/2*linspace(-1,1,NFFT) + F_central;
     
     
     S_lowres = decimate(S,DS);
-    f_lowres = decimate(f,DS);
+    f_lowres = mean(reshape(f(1:floor(numel(f)/DS)*DS),DS,floor(numel(f)/DS)),1);
+    %decimate(f*1e-6,DS)*1e6;
     
     SPEC(1:numel(S_lowres),kLT) = S_lowres;
     
@@ -72,6 +73,10 @@ SNR(SNR<0) = 0;
 
 
 %% Strongest Signal
+
+%///////////////////////////////////////////////////////%
+satfreq = 437.375*1e6; % [MHz]
+
 SPEC_searchD = SNR;
 SPEC_searchD(SPEC_searchD<3) = 0;
 [~,IndDop] = max(SPEC_searchD,[],1);
@@ -79,38 +84,39 @@ SPEC_searchD(SPEC_searchD<3) = 0;
 Logo = IndDop > numel(f_lowres)*0.2 & IndDop < numel(f_lowres)*0.8;
 
 
-SDoppler = f_lowres(IndDop);
-MeasuredDoppler = SDoppler(Logo);
+Sfreq = f_lowres(IndDop);
+Measuredfreq = Sfreq(Logo);
 time = t(Logo)/86400 + starttimemes;
-for i = 1:length(MeasuredDoppler)
-    if MeasuredDoppler(i) > 1e3*8 || MeasuredDoppler(i) < -1e3*8
-        MeasuredDoppler(i) = NaN;
+for i = 1:length(Measuredfreq)
+    if Measuredfreq(i) > (1e3*8+satfreq) || Measuredfreq(i) < (satfreq-1e3*8)
+        Measuredfreq(i) = NaN;
     end
 end
 
-Logo = isnan(MeasuredDoppler);
-MeasuredDoppler(Logo) = [];
+Logo = isnan(Measuredfreq);
+Measuredfreq(Logo) = [];
 time(Logo) = [];
 [tleData, OrbitParam] = Name2TLE('horyu');
-satfreq = 437.325; % [MHz]
-PredictedDoppler = RDSP(tleData, time, satfreq, OrbitParam);
+
+MeasuredDoppler = Measuredfreq - F_central;
+PredictedDoppler = RDSP(tleData, time, satfreq*1e-6, OrbitParam);
 for i = 1:length(MeasuredDoppler)
-    if abs(MeasuredDoppler(i)-PredictedDoppler(i)) > 1300
+    if abs(MeasuredDoppler(i)-PredictedDoppler(i)) > 2500
         MeasuredDoppler(i) = NaN;
     end
 end
 Logo = isnan(MeasuredDoppler);
 MeasuredDoppler(Logo) = [];
 time(Logo) = [];
-
+PredictedDoppler = RDSP(tleData, time, satfreq*1e-6, OrbitParam);
 % Fit using nlinfit
 beta0 = OrbitParam;
-FittedOrbitParam = nlinfit(time, MeasuredDoppler, @(OrbitParam, time) RDSP(tleData, time, satfreq, OrbitParam), beta0);
-PredictedDoppler = RDSP(tleData, time, satfreq, OrbitParam);
-FittedDoppler = RDSP(tleData, time, satfreq, FittedOrbitParam);
+FittedOrbitParam = nlinfit(time, MeasuredDoppler, @(OrbitParam, time) RDSP(tleData, time, satfreq*1e-6, OrbitParam), beta0);
+FittedDoppler = RDSP(tleData, time, satfreq*1e-6, FittedOrbitParam);
 
 hold on
 plot(time,MeasuredDoppler,'rx')
 plot(time,PredictedDoppler,'bx')
 plot(time,FittedDoppler,'gx')
 datetick('x', 13)
+ylim([-7000 7000])
