@@ -36,7 +36,7 @@ function [Doppler_shifts] = RDSP(tleData,time,satfreq,OrbitParam)
         elseif incl < 100 && incl >= 10
             tle2Data(9) = ' ';
             tle2Data(10:16) = num2str(incl,'%.4f');
-        else
+        elseif incl < 10
             tle2Data(9:10) = '  ';
             tle2Data(11:16) = num2str(incl,'%.4f');
         end
@@ -47,7 +47,7 @@ function [Doppler_shifts] = RDSP(tleData,time,satfreq,OrbitParam)
         elseif RightAsc < 100 && RightAsc >= 10
             tle2Data(18) = ' ';
             tle2Data(19:25) = num2str(RightAsc,'%.4f');
-        else
+        elseif RightAsc < 10
             tle2Data(18:19) = '  ';
             tle2Data(20:25) = num2str(RightAsc,'%.4f');
         end
@@ -62,7 +62,7 @@ function [Doppler_shifts] = RDSP(tleData,time,satfreq,OrbitParam)
         elseif argper < 100 && argper >= 10
             tle2Data(35) = ' ';
             tle2Data(36:42) = num2str(argper,'%.4f');
-        else
+        elseif argper < 10
             tle2Data(35:36) = '  ';
             tle2Data(37:42) = num2str(argper,'%.4f');
         end
@@ -73,7 +73,7 @@ function [Doppler_shifts] = RDSP(tleData,time,satfreq,OrbitParam)
         elseif meanan < 100 && meanan >= 10
             tle2Data(44) = ' ';
             tle2Data(45:51) = num2str(meanan,'%.4f');
-        else
+        elseif meanan < 10
             tle2Data(44:45) = '  ';
             tle2Data(46:51) = num2str(meanan,'%.4f');
         end
@@ -81,7 +81,7 @@ function [Doppler_shifts] = RDSP(tleData,time,satfreq,OrbitParam)
         meanmo = OrbitParam(6);
         if meanmo >= 10
             tle2Data(53:63) = num2str(meanmo,'%.8f');
-        else
+        elseif meanmo < 10
             tle2Data(53) = ' ';
             tle2Data(54:63) = num2str(meanmo,'%.8f');
         end
