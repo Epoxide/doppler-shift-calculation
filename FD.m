@@ -1,162 +1,172 @@
-function [Doppler_shifts,sat_Alt,sat_Vel] = RDSP(tleData,time,satfreq,OrbitParam)
-    addpath(genpath('./OrbitCode'));
-    addpath(genpath('./GPS_CoordinateXforms'));
-    addpath('./tle');
+clear all, close all, clc
+[SatPassFile,Pathname] = uigetfile('*.wav');
 
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    % Constants
-    whichconst          = 84;
-    typerun             = 'c';
-    typeinput           = 'e';
-    H                   = 0.500;
-    mylat               = 59.3496;
-    mylst               = 18.0724;
-    Re                  = 6378.137;     % Equatorial Earth's radius [km]
-    Rp                  = 6356.7523;    % Polar Earth's radius [km]
-    Rl                  = sqrt(((Re^2*cosd(mylat))^2+(Rp^2*sind(mylat))^2)/((Re*cosd(mylat))^2+(Rp*sind(mylat))^2))*1e3;
-    f                   = (Re - Rp)/Re; % Oblateness or flattening
-    clight              = 299792458;    % Speed of light [m/s]
-    C1   				= (Re/(1 - (2*f - f^2)*sind(mylat)^2)^0.5 + H)*cosd(mylat);
-    C2   				= (Re*(1 - f)^2/(1 - (2*f - f^2)*sind(mylat)^2)^0.5 + H)*sind(mylat);
-    % Position vector of the observer,GEF
-    R_ob 				= [C1*cosd(mylst), C1*sind(mylst),C2];
-    % GE_TH is direction cosine matrix to transform position vector components
-    % from geocentric equatorial frame into the topocentric horizon fream
-    GE_TH 				= [-sind(mylst)          cosd(mylst)              0;
-        -sind(mylat)*cosd(mylst) -sind(mylat)*sind(mylst)  cosd(mylat);
-        cosd(mylat)*cosd(mylst)  cosd(mylat)*sind(mylst)   sind(mylat)
-        ];
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    % More TLE
-    tle1Data = tleData(1:69);
-    tle2Data = tleData(71:end);
-    if nargin > 3
-        incl = OrbitParam(1);
-        if incl >= 100
-            tle2Data(9:16) = num2str(incl,'%.4f');
-        elseif incl < 100 && incl >= 10
-            tle2Data(9) = ' ';
-            tle2Data(10:16) = num2str(incl,'%.4f');
-        elseif incl < 10
-            tle2Data(9:10) = '  ';
-            tle2Data(11:16) = num2str(incl,'%.4f');
-        end
-        
-        RightAsc = OrbitParam(2);
-        if RightAsc >= 100
-            tle2Data(18:25) = num2str(RightAsc,'%.4f');
-        elseif RightAsc < 100 && RightAsc >= 10
-            tle2Data(18) = ' ';
-            tle2Data(19:25) = num2str(RightAsc,'%.4f');
-        elseif RightAsc < 10
-            tle2Data(18:19) = '  ';
-            tle2Data(20:25) = num2str(RightAsc,'%.4f');
-        end
-        
-        ecc = OrbitParam(3);
-        ecc = num2str(ecc, '%.7f');
-        tle2Data(27:33) = ecc(3:end);
-        
-        argper = OrbitParam(4);
-        if argper >= 100
-            tle2Data(35:42) = num2str(argper,'%.4f');
-        elseif argper < 100 && argper >= 10
-            tle2Data(35) = ' ';
-            tle2Data(36:42) = num2str(argper,'%.4f');
-        elseif argper < 10
-            tle2Data(35:36) = '  ';
-            tle2Data(37:42) = num2str(argper,'%.4f');
-        end
-        
-        meanan = OrbitParam(5);
-        if meanan >= 100
-            tle2Data(44:51) = num2str(meanan,'%.4f');
-        elseif meanan < 100 && meanan >= 10
-            tle2Data(44) = ' ';
-            tle2Data(45:51) = num2str(meanan,'%.4f');
-        elseif meanan < 10
-            tle2Data(44:45) = '  ';
-            tle2Data(46:51) = num2str(meanan,'%.4f');
-        end
-        
-        meanmo = OrbitParam(6);
-        if meanmo >= 10
-            tle2Data(53:63) = num2str(meanmo,'%.8f');
-        elseif meanmo < 10
-            tle2Data(53) = ' ';
-            tle2Data(54:63) = num2str(meanmo,'%.8f');
-        end
-    end
-    [satrec, ~, ~, ~] = twoline2rv(whichconst,tle1Data,tle2Data,typerun,typeinput);
+FileCode = textscan(SatPassFile,'%s%s%s%s%s','delimiter','_');
 
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Time of recording
+date = FileCode{2}{1};
+time = FileCode{3}{1}(1:end-1);
+
+starttimemes = datenum([str2num(date(1:4)), str2num(date(5:6)),...
+    str2num(date(7:8)), str2num(time(1:2)), str2num(time(3:4)),...
+    str2num(time(5:6))]);
+
+
+% Central Frequency
+F_central = str2num(FileCode{4}{1}(1:end-3))*1e3;
+
+
+% Get Data Info
+FileInfo = audioinfo([Pathname,SatPassFile]);
+FS = FileInfo.SampleRate;
+
+TS = 1/FS; % Sampling period
+
+% Split the signal in blocks of LT seconds
+LT = 0.5;
+L = ceil(1*FS*LT); % Number of samples to analyse
+NFFT = 2^nextpow2(L);
+
+% Reduce spectral resolution by factor DS
+DS = 10;
+
+% Allocate memory for 10 min of data
+SPEC = zeros(floor(NFFT/DS),floor(FileInfo.TotalSamples/L));
+windowf = hamming(L);
+
+% Compute spectra for the time windows defined by LT
+for kLT = 1 : floor(FileInfo.TotalSamples/L)
+    % Read the data from file
+    IndSignal = (L * (kLT-1) + 1 ) : ((L * kLT));
     
-    sat_Alt = zeros(1,numel(time));
-    sat_Vel = zeros(1,numel(time));
-    Doppler_shifts = zeros(1,numel(time));
-    for x = 1:numel(time)
-        timevect = datevec(time(x));
-        yr  = timevect(1);
-        mon = timevect(2);
-        day = timevect(3);
-        hr  = timevect(4);
-        min = timevect(5);
-        sec = timevect(6);
-       
-        jd = 367.0 * yr  ...
-            - floor( (7 * (yr + floor( (mon + 9) / 12.0) ) ) * 0.25 )   ...
-            + floor( 275 * mon / 9.0 ) ...
-            + day + 1721013.5  ...
-            + ( (sec/60.0 + min ) / 60.0 + hr ) / 24.0;
-        jdNow = jd;
-        tsince = (jdNow-satrec.jdsatepoch)*24*60;
-        [~, xsat_ecf, ~, ~] = spg4_ecf(satrec,tsince);
-        R_sc    = xsat_ecf';
-        % Position vector of the spacecraft relative to the observer
-        R_rel = R_sc - R_ob';
-        llhh = ecf2llhT(R_sc'*1e3);
-        llh(1) = radtodeg(llhh(1));
-        llh(2) = radtodeg(llhh(2));
-        R_rel_TH = GE_TH*R_rel;
-        Slrange = sqrt((R_rel_TH(1)^2+R_rel_TH(2)^2+R_rel_TH(3)^2))*1e3; % Slant range [m]
-        rv = R_rel_TH/norm(R_rel_TH);
-        Elev = asin(rv(3))*180/pi;      % Elevation angle
-        sat_Alt(x) = -Rl+sqrt(((Rl^2)+(Slrange^2)+(2*Slrange*Rl*sind(Elev)))); % Altitude over Earth [m]
-        R_sat   = sqrt(((Re^2*cosd(llh(1)))^2+(Rp^2*sind(llh(1)))^2)/((Re*cosd(llh(1)))^2+(Rp*sind(llh(1)))^2))*1e3; % Earth's radius under the satellite
-        sat_Vel(x) = sqrt(3.987*1e14/(R_sat+sat_Alt(x))); % Satellite's linear velocity [m/s]
-        
-        %%%%%%%%%%%%%%%
-        % 1 sec future
-        if sec == 59
-            futuresec = 00;
-            futuremin = min + 1;
-            if futuremin == 60
-                futuremin = 00;
-                futurehr = hr + 1;
-            end
-        else
-            futuresec = sec+1;
-            futuremin = min;
-            futurehr = hr;
-        end
-        
-        jdfuture = 367.0 * yr  ...
-            - floor( (7 * (yr + floor( (mon + 9) / 12.0) ) ) * 0.25 )   ...
-            + floor( 275 * mon / 9.0 ) ...
-            + day + 1721013.5  ...
-            + ( (futuresec/60.0 + futuremin ) / 60.0 + futurehr ) / 24.0;
-        jdFuture = jdfuture;
-        tsinceFuture = (jdFuture-satrec.jdsatepoch)*24*60;
-        [~, xsat_ecf, ~, ~] = spg4_ecf(satrec,tsinceFuture);
-        R_sc    = xsat_ecf';
-        % Position vector of the spacecraft relative to the observer
-        R_rel = R_sc - R_ob';
-        llhh = ecf2llhT(R_sc'*1e3);
-        llh(1) = radtodeg(llhh(1));
-        R_rel_TH = GE_TH*R_rel;
-        SlrangeFuture = sqrt((R_rel_TH(1)^2+R_rel_TH(2)^2+R_rel_TH(3)^2))*1e3; % Slant range [m]
-        dSlrange = SlrangeFuture - Slrange; % Delta slant range [m]
-        V_rel = dSlrange; % Relative velocity between ground station and satellite [m/s] (Delta t = 1)
-        Doppler_shifts(x) = V_rel*satfreq*1e6/clight; % Doppler shift [Hz]
+    [y,FS]=audioread([Pathname,SatPassFile],[IndSignal(1) IndSignal(end)]);
+    signal = complex(y(:,1),y(:,2));
+    % complex sampling?
+    
+    
+    S = abs(real(fft(windowf.*signal,NFFT)/L));
+    S = flipud([S(NFFT/2+2:end);S(1:NFFT/2+1)]);
+    f = FS/2*linspace(-1,1,NFFT) + F_central;
+    
+    
+    S_lowres = decimate(S,DS);
+    f_lowres = mean(reshape(f(1:floor(numel(f)/DS)*DS),DS,floor(numel(f)/DS)),1);
+    %decimate(f*1e-6,DS)*1e6;
+    
+    SPEC(1:numel(S_lowres),kLT) = S_lowres;
+    
+end
+
+% Time in seconds from start
+t =  TS * (0:(kLT-1))*L;
+
+
+% Remove Background
+BKGR = mean(SPEC(:,1:2),2)*1;
+SPEC = SPEC - repmat(BKGR,1,size(SPEC,2));
+SPEC(SPEC < 0) = 0;
+% Noise estimate and SNR
+Noise = mean(mean(abs(SPEC(1:floor(size(SPEC,1)/3),:))));
+SNR = 10*log10(SPEC/Noise);
+SNR(imag(SNR)~=0) = 0;
+SNR(SNR<0) = 0;
+
+
+%% Strongest Signal
+
+%///////////////////////////////////////////////////////%
+SPEC_searchD = SNR;
+SPEC_searchD(SPEC_searchD<3) = 0;
+[~,IndDop] = max(SPEC_searchD,[],1);
+
+Logo = IndDop > numel(f_lowres)*0.2 & IndDop < numel(f_lowres)*0.8;
+
+
+Sfreq = f_lowres(IndDop);
+Measuredfreq = Sfreq(Logo);
+time = t(Logo)/86400 + starttimemes;
+MeasuredDoppler = Measuredfreq - F_central;
+MeasuredDopplerPreFilter = MeasuredDoppler;
+for i = 1:length(MeasuredDoppler)
+    if MeasuredDoppler(i) > (1e3*12) || MeasuredDoppler(i) < (-1e3*12)
+        MeasuredDoppler(i) = NaN;
+    end
+    if MeasuredDoppler(i) < (200) && MeasuredDoppler(i) > (-200)
+        MeasuredDoppler(i) = NaN;
     end
 end
+
+Logo = isnan(MeasuredDoppler);
+MeasuredDoppler(Logo) = [];
+time(Logo) = [];
+[tleData, OrbitParam] = Name2TLE('saudisat');
+satfreq = 436.795*1e6; % [MHz]
+[PredictedDoppler,~,~] = RDSP(tleData, time, satfreq*1e-6, OrbitParam);
+MeasuredDopplerOneK = MeasuredDoppler;
+
+for i = 1:length(MeasuredDoppler)
+    if abs(MeasuredDoppler(i)-PredictedDoppler(i)) > 1000
+        MeasuredDoppler(i) = NaN;
+    end
+end
+Logo = isnan(MeasuredDoppler);
+MeasuredDoppler(Logo) = [];
+time(Logo) = [];
+
+for i = 2:length(MeasuredDoppler)
+    if MeasuredDoppler(i) <= MeasuredDoppler(i-1)
+        MeasuredDoppler(i) = NaN;
+    end
+end
+Logo = isnan(MeasuredDoppler);
+MeasuredDoppler(Logo) = [];
+time(Logo) = [];
+[PredictedDoppler, Predsat_Alt, Predsat_Vel] = RDSP(tleData, time, satfreq*1e-6, OrbitParam);
+% Fit using lsqcurvefit
+beta0 = OrbitParam;
+options=optimset('TolFun',1e-8,'TolX',1e-8);
+[FittedOrbitParam,RESNORM,RESIDUAL,EXITFLAG] = lsqcurvefit(@(OrbitParam, time) RDSP(tleData, time, satfreq*1e-6, OrbitParam), beta0, time, MeasuredDoppler, OrbitParam*0.9, OrbitParam*1.1, options);
+%FittedOrbitParam = nlinfit(time,MeasuredDoppler,@(OrbitParam, time) RDSP(tleData,time,satfreq*1e-6,OrbitParam), beta0);
+[FittedDoppler, Fitsat_Alt, Fitsat_Vel] = RDSP(tleData, time, satfreq*1e-6, FittedOrbitParam);
+
+disp(['Predicted Orbit Parameters:' char(10) 'Inclination: ' num2str(OrbitParam(1)) ' degrees' char(10) 'Right Ascension of the Ascending Node: ' num2str(OrbitParam(2)) ' degrees' char(10) 'Eccentricity: ' num2str(OrbitParam(3)) char(10) 'Argument of Perigee: ' num2str(OrbitParam(4)) ' degrees' char(10) 'Mean Anomaly: ' num2str(OrbitParam(5)) ' degrees' char(10) 'Mean Motion: ' num2str(OrbitParam(6)) ' revs/day']);
+disp(' ')
+disp(['Fitted Orbit Parameters:' char(10) 'Inclination: ' num2str(FittedOrbitParam(1)) ' degrees' char(10) 'Right Ascension of the Ascending Node: ' num2str(FittedOrbitParam(2)) ' degrees' char(10) 'Eccentricity: ' num2str(FittedOrbitParam(3)) char(10) 'Argument of Perigee: ' num2str(FittedOrbitParam(4)) ' degrees' char(10) 'Mean Anomaly: ' num2str(FittedOrbitParam(5)) ' degrees' char(10) 'Mean Motion: ' num2str(FittedOrbitParam(6)) ' revs/day']);
+disp(' ')
+Altres = zeros(1,length(Predsat_Alt));
+Velres = zeros(1,length(Predsat_Vel));
+for i = 1:length(Predsat_Alt)
+    Altres(i) = abs(Predsat_Alt(i)-Fitsat_Alt(i));
+end
+for i = 1:length(Predsat_Vel)
+    Velres(i) = abs(Predsat_Vel(i)-Fitsat_Vel(i));
+end
+Altaverage = mean(Altres);
+Velaverage = mean(Velres);
+disp(['Average altitude difference from predicted and fitted: ' num2str(Altaverage), ' m']);
+disp(['Average velocity difference from predicted and fitted: ' num2str(Velaverage), ' km/s']);
+
+figure(1)
+hold on
+plot(time,MeasuredDoppler,'rx',time,PredictedDoppler,'bx',time,FittedDoppler,'gx')
+legend('Measured Doppler Shift','Predicted Doppler Shift','Fitted Doppler Shift')
+datetick('x', 13)
+title('Measured, Predicted, and Fitted Doppler Shifts')
+xlabel('Time')
+ylabel('Doppler Shift [Hz]')
+figure(2)
+hold on
+subplot(2,1,1)
+plot(time,Predsat_Alt,'rx',time,Fitsat_Alt,'bx')
+legend('Predicted Satellite Altitude','Fitted Satellite Altitude')
+datetick('x', 13)
+title('Predicted, and Fitted Satellite Altitudes')
+xlabel('Time')
+ylabel('Satellite Altitude [m]')
+subplot(2,1,2)
+plot(time,Predsat_Vel,'rx',time,Fitsat_Vel,'bx')
+legend('Predicted Satellite Orbital Velocity','Fitted Satellite Orbital Velocity Velocity')
+datetick('x', 13)
+title('Predicted, and Fitted Satellite Orbital Velocities')
+xlabel('Time')
+ylabel('Satellite Orbital Velocity [km/s]')
