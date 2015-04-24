@@ -1,4 +1,4 @@
-function [Doppler_shifts] = RDSP(tleData,time,satfreq,OrbitParam)
+function [Doppler_shifts,sat_Alt,sat_Vel] = RDSP(tleData,time,satfreq,OrbitParam)
     addpath(genpath('./OrbitCode'));
     addpath(genpath('./GPS_CoordinateXforms'));
     addpath('./tle');
@@ -13,6 +13,7 @@ function [Doppler_shifts] = RDSP(tleData,time,satfreq,OrbitParam)
     mylst               = 18.0724;
     Re                  = 6378.137;     % Equatorial Earth's radius [km]
     Rp                  = 6356.7523;    % Polar Earth's radius [km]
+    Rl                  = sqrt(((Re^2*cosd(mylat))^2+(Rp^2*sind(mylat))^2)/((Re*cosd(mylat))^2+(Rp*sind(mylat))^2))*1e3;
     f                   = (Re - Rp)/Re; % Oblateness or flattening
     clight              = 299792458;    % Speed of light [m/s]
     C1   				= (Re/(1 - (2*f - f^2)*sind(mylat)^2)^0.5 + H)*cosd(mylat);
@@ -86,10 +87,12 @@ function [Doppler_shifts] = RDSP(tleData,time,satfreq,OrbitParam)
             tle2Data(54:63) = num2str(meanmo,'%.8f');
         end
     end
-    [satrec, ~, ~, ~] = twoline2rv(whichconst, tle1Data,tle2Data,typerun,typeinput);
+    [satrec, ~, ~, ~] = twoline2rv(whichconst,tle1Data,tle2Data,typerun,typeinput);
 
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     
+    sat_Alt = zeros(1,numel(time));
+    sat_Vel = zeros(1,numel(time));
     Doppler_shifts = zeros(1,numel(time));
     for x = 1:numel(time)
         timevect = datevec(time(x));
@@ -116,6 +119,11 @@ function [Doppler_shifts] = RDSP(tleData,time,satfreq,OrbitParam)
         llh(2) = radtodeg(llhh(2));
         R_rel_TH = GE_TH*R_rel;
         Slrange = sqrt((R_rel_TH(1)^2+R_rel_TH(2)^2+R_rel_TH(3)^2))*1e3; % Slant range [m]
+        rv = R_rel_TH/norm(R_rel_TH);
+        Elev = asin(rv(3))*180/pi;      % Elevation angle
+        sat_Alt(x) = -Rl+sqrt(((Rl^2)+(Slrange^2)+(2*Slrange*Rl*sind(Elev)))); % Altitude over Earth [m]
+        R_sat   = sqrt(((Re^2*cosd(llh(1)))^2+(Rp^2*sind(llh(1)))^2)/((Re*cosd(llh(1)))^2+(Rp*sind(llh(1)))^2))*1e3; % Earth's radius under the satellite
+        sat_Vel(x) = sqrt(3.987*1e14/(R_sat+sat_Alt(x))); % Satellite's linear velocity [m/s]
         
         %%%%%%%%%%%%%%%
         % 1 sec future
